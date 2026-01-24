@@ -1,0 +1,8 @@
+# .gitignore
+__pycache__/
+*.pyc
+*.pkl
+fraud_guard.db
+venv/
+.env
+.DS_Store
