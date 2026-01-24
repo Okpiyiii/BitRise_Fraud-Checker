@@ -5,11 +5,9 @@ import os
 DB_NAME = "fraud_guard.db"
 
 def init_db():
-    """Initialize the database with users and transactions tables."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    
-    # Users Table: Added 'custom_limit' (Default -1 means No Limit)
+    # Users Table with custom_limit
     c.execute('''CREATE TABLE IF NOT EXISTS users (
                  user_id TEXT PRIMARY KEY,
                  avg_amount REAL DEFAULT 0,
@@ -18,7 +16,7 @@ def init_db():
                  custom_limit REAL DEFAULT -1 
                  )''')
 
-    # Transactions Table: Stores history for audits
+    # Transactions Table
     c.execute('''CREATE TABLE IF NOT EXISTS transactions (
                  id INTEGER PRIMARY KEY AUTOINCREMENT,
                  user_id TEXT,
@@ -29,18 +27,15 @@ def init_db():
                  long REAL,
                  device_id TEXT
                  )''')
-    
     conn.commit()
     conn.close()
 
 def reset_db():
-    """Wipes the database for testing/demo purposes."""
     if os.path.exists(DB_NAME):
         os.remove(DB_NAME)
     init_db()
 
 def get_user_profile(user_id):
-    """Fetch user profile and custom limits."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
@@ -57,22 +52,17 @@ def get_user_profile(user_id):
     return None
 
 def set_user_limit(user_id, limit):
-    """Set a custom spending limit for a user."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    
-    # Check if user exists; if not, create a placeholder profile
     c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
     if not c.fetchone():
         c.execute("INSERT INTO users (user_id, avg_amount, txn_count, safe_categories, custom_limit) VALUES (?, 0, 0, '[]', ?)", (user_id, limit))
     else:
         c.execute("UPDATE users SET custom_limit=? WHERE user_id=?", (limit, user_id))
-    
     conn.commit()
     conn.close()
 
 def update_user_profile(user_id, amount, category):
-    """Update behavioral profile (Self-Learning)."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
@@ -87,14 +77,12 @@ def update_user_profile(user_id, amount, category):
         c.execute("UPDATE users SET avg_amount=?, txn_count=?, safe_categories=? WHERE user_id=?", 
                   (new_avg, new_count, json.dumps(cats), user_id))
     else:
-        # Create new user (Default limit -1)
         c.execute("INSERT INTO users (user_id, avg_amount, txn_count, safe_categories, custom_limit) VALUES (?, ?, 1, ?, -1)", 
                   (user_id, amount, json.dumps([category])))
     conn.commit()
     conn.close()
 
 def get_last_transaction(user_id):
-    """Get last transaction for velocity checks."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("SELECT * FROM transactions WHERE user_id=? ORDER BY timestamp DESC LIMIT 1", (user_id,))
@@ -105,7 +93,6 @@ def get_last_transaction(user_id):
     return None
 
 def log_transaction(txn_data):
-    """Log transaction details."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("INSERT INTO transactions (user_id, amount, category, timestamp, lat, long, device_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -113,11 +100,20 @@ def log_transaction(txn_data):
     conn.commit()
     conn.close()
 
-def check_device_users(device_id):
-    """Count unique users on a device (Fraud Ring Detection)."""
+def check_device_users_count(device_id):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("SELECT COUNT(DISTINCT user_id) FROM transactions WHERE device_id=?", (device_id,))
     count = c.fetchone()[0]
     conn.close()
     return count
+
+# --- NEW FUNCTION FOR FRAUD RING LIST ---
+def get_device_users(device_id):
+    """Returns a list of all user_ids associated with a device."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT user_id FROM transactions WHERE device_id=?", (device_id,))
+    users = [row[0] for row in c.fetchall()]
+    conn.close()
+    return users
